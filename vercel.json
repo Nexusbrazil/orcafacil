@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "framework": null,
+  "functions": {
+    "api/transcrever.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/orcamento.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, Accept, X-Requested-With, Origin"
+        },
+        { "key": "Access-Control-Max-Age", "value": "86400" }
+      ]
+    }
+  ]
+}
