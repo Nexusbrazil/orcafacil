@@ -26,6 +26,41 @@ function lerOmnirouteKey() {
   return String(process.env.OMNIROUTE_API_KEY || '').trim();
 }
 
+function resolverUrlChat() {
+  const bruto = String(process.env.OMNIROUTE_URL || 'https://cloud.omniroute.online')
+    .trim()
+    .replace(/\/$/, '');
+
+  if (/\/chat\/completions$/i.test(bruto)) return bruto;
+  if (/\/v1$/i.test(bruto)) return `${bruto}/chat/completions`;
+  return `${bruto}/v1/chat/completions`;
+}
+
+function serializarErro(erro) {
+  const cause = erro?.cause;
+  const causa = cause
+    ? {
+        message: cause.message || String(cause),
+        name: cause.name,
+        code: cause.code,
+        errno: cause.errno,
+        syscall: cause.syscall,
+        hostname: cause.hostname,
+        address: cause.address,
+        port: cause.port,
+      }
+    : undefined;
+
+  return {
+    message: erro?.message || String(erro),
+    name: erro?.name,
+    code: erro?.code || cause?.code,
+    cause: causa,
+    url: erro?.url,
+    modelo: erro?.modelo,
+  };
+}
+
 function erroChaveAusente() {
   return {
     erro: 'OMNIROUTE_API_KEY não configurada no servidor.',
@@ -181,22 +216,37 @@ function extrairJson(conteudoRaw) {
   }
 }
 
-async function chamarModelo(modelo, mensagens, apiKey, baseUrl) {
-  const resposta = await fetch(`${baseUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: modelo,
-      messages: mensagens,
-      temperature: 0.3,
-      max_tokens: 1500,
-      response_format: { type: 'json_object' },
-    }),
-    signal: AbortSignal.timeout(Number(process.env.ORCAMENTO_TIMEOUT_MS || 45000)),
-  });
+async function chamarModelo(modelo, mensagens, apiKey) {
+  const url = resolverUrlChat();
+  const apiKeyTrim = String(process.env.OMNIROUTE_API_KEY || apiKey || '').trim();
+
+  let resposta;
+  try {
+    resposta = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKeyTrim}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Node-Fetch',
+      },
+      body: JSON.stringify({
+        model: modelo,
+        messages: mensagens,
+        temperature: 0.3,
+        max_tokens: 1500,
+        response_format: { type: 'json_object' },
+      }),
+      signal: AbortSignal.timeout(Number(process.env.ORCAMENTO_TIMEOUT_MS || 45000)),
+    });
+  } catch (erroFetch) {
+    const falha = new Error(erroFetch.message || 'fetch failed');
+    falha.name = erroFetch.name || 'FetchError';
+    falha.cause = erroFetch.cause || erroFetch;
+    falha.code = erroFetch.code || erroFetch.cause?.code;
+    falha.url = url;
+    falha.modelo = modelo;
+    throw falha;
+  }
 
   const bruto = await resposta.text();
   let parsed = {};
@@ -207,12 +257,18 @@ async function chamarModelo(modelo, mensagens, apiKey, baseUrl) {
   }
 
   if (!resposta.ok) {
-    throw new Error(parsed.error?.message || `Status ${resposta.status}: ${bruto.slice(0, 300)}`);
+    const falha = new Error(parsed.error?.message || `Status ${resposta.status}: ${bruto.slice(0, 300)}`);
+    falha.url = url;
+    falha.modelo = modelo;
+    throw falha;
   }
 
   const conteudo = parsed?.choices?.[0]?.message?.content;
   if (!conteudo) {
-    throw new Error('Resposta vazia da IA.');
+    const falha = new Error('Resposta vazia da IA.');
+    falha.url = url;
+    falha.modelo = modelo;
+    throw falha;
   }
 
   return extrairJson(conteudo);
@@ -234,6 +290,7 @@ export default async function handler(req, res) {
         ok: Boolean(apiKey),
         servico: 'orcamento',
         omniroute_configurada: Boolean(apiKey),
+        url_chat: resolverUrlChat(),
         metodo: 'POST JSON { mensagem, profissao, historico, fluxo? }',
         ...(apiKey ? {} : erroChaveAusente()),
       });
@@ -267,7 +324,6 @@ export default async function handler(req, res) {
       return json(req, res, 400, { erro: `A mensagem excede ${maxMensagem} caracteres.` });
     }
 
-    const baseUrl = String(process.env.OMNIROUTE_URL || 'https://api.omniroute.ai').replace(/\/$/, '');
     const modelos = [...new Set([
       process.env.ORCAMENTO_MODEL_PRIMARY || 'deepseek-chat',
       process.env.ORCAMENTO_MODEL_FALLBACK || 'gemini-1.5-flash',
@@ -283,7 +339,7 @@ export default async function handler(req, res) {
 
     for (const modelo of modelos) {
       try {
-        const parsed = await chamarModelo(modelo, mensagens, apiKey, baseUrl);
+        const parsed = await chamarModelo(modelo, mensagens, apiKey);
         const normalizado = normalizarResposta(parsed);
 
         if (!normalizado.perguntas_feedback && !normalizado.orcamento.servico_descricao) {
@@ -293,20 +349,20 @@ export default async function handler(req, res) {
         return json(req, res, 200, normalizado);
       } catch (erro) {
         ultimoErro = erro;
-        console.warn(`[orcamento] Falha no modelo ${modelo}:`, erro.message);
+        console.warn(`[orcamento] Falha no modelo ${modelo}:`, serializarErro(erro));
       }
     }
 
-    console.error('[orcamento] Todos os modelos falharam:', ultimoErro?.message);
+    console.error('[orcamento] Todos os modelos falharam:', serializarErro(ultimoErro));
     return json(req, res, 502, {
       erro: 'Não foi possível gerar o orçamento no momento.',
-      detalhe: ultimoErro?.message || 'Desconhecido',
+      detalhe: serializarErro(ultimoErro),
     });
   } catch (erro) {
-    console.error('[orcamento] Erro inesperado:', erro);
+    console.error('[orcamento] Erro inesperado:', serializarErro(erro));
     return json(req, res, 500, {
       erro: 'Erro interno ao gerar o orçamento.',
-      detalhe: erro.message || 'Desconhecido',
+      detalhe: serializarErro(erro),
     });
   }
 }
