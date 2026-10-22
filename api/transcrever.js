@@ -7,7 +7,7 @@ export const config = {
   },
 };
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const CAMPOS_ARQUIVO = new Set(['file', 'audio', 'audio_file', 'arquivo', 'recording', 'uploaded_file']);
 
