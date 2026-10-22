@@ -1,5 +1,5 @@
 // /api/transcrever.js
-// POST multipart/form-data → Whisper via Omniroute autenticado com OMNIROUTE_API_KEY.
+// POST multipart/form-data → Gemini Flash multimodal autenticado com GEMINI_API_KEY.
 
 export const config = {
   api: {
@@ -7,6 +7,8 @@ export const config = {
   },
 };
 
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const CAMPOS_ARQUIVO = new Set(['file', 'audio', 'audio_file', 'arquivo', 'recording', 'uploaded_file']);
 
 function aplicarCors(req, res) {
@@ -30,29 +32,53 @@ function json(req, res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function lerOmnirouteKey() {
-  return String(process.env.OMNIROUTE_API_KEY || '').trim();
+function lerGeminiKey() {
+  return String(process.env.GEMINI_API_KEY || '').trim();
 }
 
 function erroChaveAusente() {
   return {
-    erro: 'OMNIROUTE_API_KEY não configurada no servidor.',
-    dica: 'Em Vercel → Project → Settings → Environment Variables, crie OMNIROUTE_API_KEY e faça um novo deploy.',
+    erro: 'GEMINI_API_KEY não configurada no servidor.',
+    dica: 'Em Vercel → Project → Settings → Environment Variables, crie GEMINI_API_KEY e faça um novo deploy.',
   };
 }
 
-function extensaoPorMime(mimeType, filename = '') {
-  const nome = String(filename).toLowerCase();
-  if (/\.(webm|wav|mp3|m4a|mp4|ogg|flac|mpeg|mpga)$/.test(nome)) return nome.slice(nome.lastIndexOf('.'));
+function serializarErro(erro) {
+  const cause = erro?.cause;
+  return {
+    message: erro?.message || String(erro),
+    name: erro?.name,
+    code: erro?.code || cause?.code,
+    cause: cause
+      ? {
+          message: cause.message || String(cause),
+          name: cause.name,
+          code: cause.code,
+          syscall: cause.syscall,
+          hostname: cause.hostname,
+        }
+      : undefined,
+  };
+}
 
+function urlGemini(apiKey) {
+  return `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+}
+
+function mimeGemini(mimeType, filename = '') {
+  const nome = String(filename).toLowerCase();
   const mime = String(mimeType || '').toLowerCase();
-  if (mime.includes('webm')) return '.webm';
-  if (mime.includes('wav')) return '.wav';
-  if (mime.includes('mpeg') || mime.includes('mp3')) return '.mp3';
-  if (mime.includes('m4a') || mime.includes('mp4') || mime.includes('aac')) return '.m4a';
-  if (mime.includes('ogg')) return '.ogg';
-  if (mime.includes('flac')) return '.flac';
-  return '.webm';
+
+  if (mime.includes('wav') || nome.endsWith('.wav')) return 'audio/wav';
+  if (mime.includes('mpeg') || mime.includes('mp3') || nome.endsWith('.mp3')) return 'audio/mp3';
+  if (mime.includes('m4a') || nome.endsWith('.m4a')) return 'audio/mp4';
+  if (mime.includes('mp4') || nome.endsWith('.mp4')) return 'audio/mp4';
+  if (mime.includes('ogg') || nome.endsWith('.ogg')) return 'audio/ogg';
+  if (mime.includes('flac') || nome.endsWith('.flac')) return 'audio/flac';
+  if (mime.includes('aac') || nome.endsWith('.aac')) return 'audio/aac';
+  if (mime.includes('webm') || nome.endsWith('.webm')) return 'audio/webm';
+  if (mime.startsWith('audio/')) return mime;
+  return 'audio/webm';
 }
 
 function lerBuffer(req, maxBytes) {
@@ -195,36 +221,47 @@ function audioDeJson(body) {
   };
 }
 
-function arquivoParaWhisper(audio) {
-  const filename = `audio${extensaoPorMime(audio.mimeType, audio.filename)}`;
-  const bytes = new Uint8Array(audio.buffer.buffer, audio.buffer.byteOffset, audio.buffer.byteLength);
-  const type = audio.mimeType || 'application/octet-stream';
+async function transcreverComGemini(audio, apiKey) {
+  const url = urlGemini(apiKey);
+  let resposta;
 
-  if (typeof File === 'function') {
-    return new File([bytes], filename, { type });
+  try {
+    resposta = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'OrçaFácil-AI/1.0',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Transcreva este áudio em português brasileiro. Devolva APENAS o texto falado, sem aspas, sem markdown e sem comentários.',
+              },
+              {
+                inlineData: {
+                  mimeType: mimeGemini(audio.mimeType, audio.filename),
+                  data: audio.buffer.toString('base64'),
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 2048,
+        },
+      }),
+      signal: AbortSignal.timeout(Number(process.env.GEMINI_TIMEOUT_MS || 50000)),
+    });
+  } catch (erroFetch) {
+    const falha = new Error(erroFetch.message || 'fetch failed');
+    falha.cause = erroFetch.cause || erroFetch;
+    falha.code = erroFetch.code || erroFetch.cause?.code;
+    throw falha;
   }
-
-  const blob = new Blob([bytes], { type });
-  blob.name = filename;
-  return blob;
-}
-
-async function transcreverComModelo(audio, modelo, apiKey, baseUrl) {
-  const form = new FormData();
-  const arquivo = arquivoParaWhisper(audio);
-  const filename = arquivo.name || `audio${extensaoPorMime(audio.mimeType, audio.filename)}`;
-
-  form.append('file', arquivo, filename);
-  form.append('model', modelo);
-  form.append('language', process.env.WHISPER_LANGUAGE || 'pt');
-  form.append('response_format', 'json');
-
-  const resposta = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-    signal: AbortSignal.timeout(Number(process.env.WHISPER_TIMEOUT_MS || 50000)),
-  });
 
   const bruto = await resposta.text();
   let parsed = {};
@@ -235,19 +272,22 @@ async function transcreverComModelo(audio, modelo, apiKey, baseUrl) {
   }
 
   if (!resposta.ok) {
-    const erro = new Error(parsed.error?.message || parsed.erro || `Whisper HTTP ${resposta.status}`);
+    const erro = new Error(parsed.error?.message || `Gemini HTTP ${resposta.status}`);
     erro.status = resposta.status;
     throw erro;
   }
 
-  const texto = String(parsed.text || parsed.texto || '').trim();
+  const parts = parsed?.candidates?.[0]?.content?.parts || [];
+  const texto = parts.map((part) => part.text || '').join('').trim();
+  const bloqueio = parsed?.promptFeedback?.blockReason || parsed?.candidates?.[0]?.finishReason;
+
   if (!texto) {
-    const erro = new Error('Transcrição vazia.');
+    const erro = new Error(bloqueio ? `Resposta bloqueada: ${bloqueio}` : 'Transcrição vazia.');
     erro.status = 422;
     throw erro;
   }
 
-  return texto;
+  return texto.replace(/^["']|["']$/g, '').trim();
 }
 
 export default async function handler(req, res) {
@@ -259,14 +299,16 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    const apiKey = lerOmnirouteKey();
+    const apiKey = lerGeminiKey();
     const maxAudioBytes = Number(process.env.MAX_AUDIO_BYTES || 4.5 * 1024 * 1024);
 
     if (req.method === 'GET') {
       return json(req, res, apiKey ? 200 : 500, {
         ok: Boolean(apiKey),
         servico: 'transcrever',
-        omniroute_configurada: Boolean(apiKey),
+        provedor: 'gemini',
+        modelo: GEMINI_MODEL,
+        gemini_configurada: Boolean(apiKey),
         metodo: 'POST multipart/form-data no campo "file" (ou "audio")',
         ...(apiKey ? {} : erroChaveAusente()),
       });
@@ -312,29 +354,8 @@ export default async function handler(req, res) {
       });
     }
 
-    const baseUrl = String(process.env.OMNIROUTE_URL || 'https://api.omniroute.ai').replace(/\/$/, '');
-    const tentativas = [...new Set([
-      process.env.WHISPER_MODEL,
-      'whisper-1',
-      'openai/whisper-1',
-    ].filter(Boolean))];
-
-    let ultimoErro = null;
-
-    for (const modelo of tentativas) {
-      try {
-        const texto = await transcreverComModelo(audio, modelo, apiKey, baseUrl);
-        return json(req, res, 200, { texto });
-      } catch (erro) {
-        ultimoErro = erro;
-        console.warn(`[transcrever] Falha no modelo ${modelo}:`, erro.message);
-      }
-    }
-
-    return json(req, res, ultimoErro?.status && ultimoErro.status < 500 ? ultimoErro.status : 502, {
-      erro: 'Falha ao transcrever o áudio.',
-      detalhe: ultimoErro?.message || 'Desconhecido',
-    });
+    const texto = await transcreverComGemini(audio, apiKey);
+    return json(req, res, 200, { texto });
   } catch (erro) {
     if (erro.status === 413 || erro.message === 'AUDIO_TOO_LARGE') {
       return json(req, res, 413, {
@@ -342,10 +363,10 @@ export default async function handler(req, res) {
       });
     }
 
-    console.error('[transcrever] Erro inesperado:', erro);
-    return json(req, res, 500, {
-      erro: 'Erro interno ao transcrever o áudio.',
-      detalhe: erro.message || 'Desconhecido',
+    console.error('[transcrever] Erro:', serializarErro(erro));
+    return json(req, res, erro.status && erro.status < 500 ? erro.status : 502, {
+      erro: 'Falha ao transcrever o áudio.',
+      detalhe: serializarErro(erro),
     });
   }
 }

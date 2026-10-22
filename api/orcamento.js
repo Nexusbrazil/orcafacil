@@ -1,5 +1,40 @@
 // /api/orcamento.js
-// POST JSON → Omniroute (chat) autenticado com OMNIROUTE_API_KEY.
+// POST JSON → Google Gemini REST (gemini-2.5-flash) autenticado com GEMINI_API_KEY.
+
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+const SCHEMA_ORCAMENTO = {
+  type: 'OBJECT',
+  properties: {
+    status: { type: 'STRING', enum: ['incompleto', 'completo'] },
+    perguntas_feedback: { type: 'STRING' },
+    orcamento: {
+      type: 'OBJECT',
+      properties: {
+        cliente: { type: 'STRING' },
+        servico_descricao: { type: 'STRING' },
+        mao_de_obra_valor: { type: 'NUMBER' },
+        materiais_inclusos: { type: 'ARRAY', items: { type: 'STRING' } },
+        valor_total: { type: 'NUMBER' },
+        prazo_entrega: { type: 'STRING' },
+        garantia: { type: 'STRING' },
+        condicoes_pagamento: { type: 'STRING' },
+      },
+      required: [
+        'cliente',
+        'servico_descricao',
+        'mao_de_obra_valor',
+        'materiais_inclusos',
+        'valor_total',
+        'prazo_entrega',
+        'garantia',
+        'condicoes_pagamento',
+      ],
+    },
+  },
+  required: ['status', 'perguntas_feedback', 'orcamento'],
+};
 
 function aplicarCors(req, res) {
   const requested = req.headers?.['access-control-request-headers'];
@@ -22,15 +57,37 @@ function json(req, res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function lerOmnirouteKey() {
-  return String(process.env.OMNIROUTE_API_KEY || '').trim();
+function lerGeminiKey() {
+  return String(process.env.GEMINI_API_KEY || '').trim();
 }
 
 function erroChaveAusente() {
   return {
-    erro: 'OMNIROUTE_API_KEY não configurada no servidor.',
-    dica: 'Em Vercel → Project → Settings → Environment Variables, crie OMNIROUTE_API_KEY e faça um novo deploy.',
+    erro: 'GEMINI_API_KEY não configurada no servidor.',
+    dica: 'Em Vercel → Project → Settings → Environment Variables, crie GEMINI_API_KEY e faça um novo deploy.',
   };
+}
+
+function serializarErro(erro) {
+  const cause = erro?.cause;
+  return {
+    message: erro?.message || String(erro),
+    name: erro?.name,
+    code: erro?.code || cause?.code,
+    cause: cause
+      ? {
+          message: cause.message || String(cause),
+          name: cause.name,
+          code: cause.code,
+          syscall: cause.syscall,
+          hostname: cause.hostname,
+        }
+      : undefined,
+  };
+}
+
+function urlGemini(apiKey) {
+  return `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
 }
 
 function lerBuffer(req) {
@@ -101,15 +158,15 @@ function normalizarHistorico(historico, maxItens) {
   return lista
     .filter((item) => item && typeof item === 'object')
     .map((item) => {
-      const role = item.role === 'assistant' || item.role === 'system' ? item.role : 'user';
+      const role = item.role === 'assistant' || item.role === 'model' ? 'model' : 'user';
       const content = String(item.content ?? item.mensagem ?? item.text ?? item.texto ?? '').trim();
       return { role, content };
     })
-    .filter((item) => item.content && item.role !== 'system')
+    .filter((item) => item.content)
     .slice(-maxItens);
 }
 
-function montarPrompt(profissao, fluxo) {
+function montarInstrucao(profissao, fluxo) {
   const oficio = profissao || 'profissionais autônomos';
 
   return `Você é um assistente especializado em elaborar orçamentos profissionais para ${oficio} no Brasil.
@@ -181,22 +238,45 @@ function extrairJson(conteudoRaw) {
   }
 }
 
-async function chamarModelo(modelo, mensagens, apiKey, baseUrl) {
-  const resposta = await fetch(`${baseUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: modelo,
-      messages: mensagens,
-      temperature: 0.3,
-      max_tokens: 1500,
-      response_format: { type: 'json_object' },
-    }),
-    signal: AbortSignal.timeout(Number(process.env.ORCAMENTO_TIMEOUT_MS || 45000)),
-  });
+function textoDoGemini(parsed) {
+  const parts = parsed?.candidates?.[0]?.content?.parts || [];
+  const texto = parts.map((part) => part.text || '').join('').trim();
+  const bloqueio = parsed?.promptFeedback?.blockReason || parsed?.candidates?.[0]?.finishReason;
+  if (!texto) {
+    throw new Error(parsed?.error?.message || (bloqueio ? `Resposta bloqueada: ${bloqueio}` : 'Resposta vazia da IA.'));
+  }
+  return texto;
+}
+
+async function chamarGemini({ apiKey, systemInstruction, contents }) {
+  const url = urlGemini(apiKey);
+  let resposta;
+
+  try {
+    resposta = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'OrçaFácil-AI/1.0',
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents,
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 2048,
+          responseMimeType: 'application/json',
+          responseSchema: SCHEMA_ORCAMENTO,
+        },
+      }),
+      signal: AbortSignal.timeout(Number(process.env.ORCAMENTO_TIMEOUT_MS || 45000)),
+    });
+  } catch (erroFetch) {
+    const falha = new Error(erroFetch.message || 'fetch failed');
+    falha.cause = erroFetch.cause || erroFetch;
+    falha.code = erroFetch.code || erroFetch.cause?.code;
+    throw falha;
+  }
 
   const bruto = await resposta.text();
   let parsed = {};
@@ -207,15 +287,10 @@ async function chamarModelo(modelo, mensagens, apiKey, baseUrl) {
   }
 
   if (!resposta.ok) {
-    throw new Error(parsed.error?.message || `Status ${resposta.status}: ${bruto.slice(0, 300)}`);
+    throw new Error(parsed.error?.message || `Gemini HTTP ${resposta.status}: ${bruto.slice(0, 300)}`);
   }
 
-  const conteudo = parsed?.choices?.[0]?.message?.content;
-  if (!conteudo) {
-    throw new Error('Resposta vazia da IA.');
-  }
-
-  return extrairJson(conteudo);
+  return extrairJson(textoDoGemini(parsed));
 }
 
 export default async function handler(req, res) {
@@ -227,13 +302,15 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    const apiKey = lerOmnirouteKey();
+    const apiKey = lerGeminiKey();
 
     if (req.method === 'GET') {
       return json(req, res, apiKey ? 200 : 500, {
         ok: Boolean(apiKey),
         servico: 'orcamento',
-        omniroute_configurada: Boolean(apiKey),
+        provedor: 'gemini',
+        modelo: GEMINI_MODEL,
+        gemini_configurada: Boolean(apiKey),
         metodo: 'POST JSON { mensagem, profissao, historico, fluxo? }',
         ...(apiKey ? {} : erroChaveAusente()),
       });
@@ -267,46 +344,31 @@ export default async function handler(req, res) {
       return json(req, res, 400, { erro: `A mensagem excede ${maxMensagem} caracteres.` });
     }
 
-    const baseUrl = String(process.env.OMNIROUTE_URL || 'https://api.omniroute.ai').replace(/\/$/, '');
-    const modelos = [...new Set([
-      process.env.ORCAMENTO_MODEL_PRIMARY || 'deepseek-chat',
-      process.env.ORCAMENTO_MODEL_FALLBACK || 'gemini-1.5-flash',
-    ].filter(Boolean))];
-
-    const mensagens = [
-      { role: 'system', content: montarPrompt(profissao, fluxo) },
-      ...normalizarHistorico(body.historico, 20),
-      { role: 'user', content: mensagem },
+    const contents = [
+      ...normalizarHistorico(body.historico, 20).map((item) => ({
+        role: item.role,
+        parts: [{ text: item.content }],
+      })),
+      { role: 'user', parts: [{ text: mensagem }] },
     ];
 
-    let ultimoErro = null;
+    const parsed = await chamarGemini({
+      apiKey,
+      systemInstruction: montarInstrucao(profissao, fluxo),
+      contents,
+    });
 
-    for (const modelo of modelos) {
-      try {
-        const parsed = await chamarModelo(modelo, mensagens, apiKey, baseUrl);
-        const normalizado = normalizarResposta(parsed);
-
-        if (!normalizado.perguntas_feedback && !normalizado.orcamento.servico_descricao) {
-          return json(req, res, 422, { erro: 'A IA retornou JSON com estrutura insuficiente.' });
-        }
-
-        return json(req, res, 200, normalizado);
-      } catch (erro) {
-        ultimoErro = erro;
-        console.warn(`[orcamento] Falha no modelo ${modelo}:`, erro.message);
-      }
+    const normalizado = normalizarResposta(parsed);
+    if (!normalizado.perguntas_feedback && !normalizado.orcamento.servico_descricao) {
+      return json(req, res, 422, { erro: 'A IA retornou JSON com estrutura insuficiente.' });
     }
 
-    console.error('[orcamento] Todos os modelos falharam:', ultimoErro?.message);
+    return json(req, res, 200, normalizado);
+  } catch (erro) {
+    console.error('[orcamento] Erro:', serializarErro(erro));
     return json(req, res, 502, {
       erro: 'Não foi possível gerar o orçamento no momento.',
-      detalhe: ultimoErro?.message || 'Desconhecido',
-    });
-  } catch (erro) {
-    console.error('[orcamento] Erro inesperado:', erro);
-    return json(req, res, 500, {
-      erro: 'Erro interno ao gerar o orçamento.',
-      detalhe: erro.message || 'Desconhecido',
+      detalhe: serializarErro(erro),
     });
   }
 }
