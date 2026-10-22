@@ -3,195 +3,345 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OrçaFácil-AI — Teste da API</title>
+  <title>OrçaFácil AI — Orçamentos Inteligentes</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-</head>
-<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col font-sans">
 
-  <!-- Header -->
-  <header class="border-b border-gray-800 bg-gray-950 p-4 sticky top-0 z-10">
-    <div class="max-w-4xl mx-auto flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="bg-blue-600 p-2 rounded-lg text-white">
-          <i class="fa-solid fa-robot text-xl"></i>
-        </div>
-        <div>
-          <h1 class="text-xl font-bold tracking-tight text-white">OrçaFácil-AI</h1>
-          <p class="text-xs text-gray-400">Gerador e Simulador de Orçamentos com Gemini Flash</p>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['"Playfair Display"', 'serif'],
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            creme: {
+              50: '#FDFCF7',
+              100: '#F7F4EB',
+              200: '#EFEAD8',
+              300: '#E1D7BF',
+              800: '#4A4436',
+              900: '#2C271E',
+            },
+            gold: {
+              400: '#D4AF37',
+              500: '#C5A028',
+              600: '#A38118',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-creme-50 text-creme-900 font-sans min-h-screen flex flex-col antialiased">
+
+  <!-- Sidebar / Menu Lateral Deslizante -->
+  <div id="sidebarBackdrop" onclick="toggleSidebar()" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 hidden transition-opacity"></div>
+  <aside id="sidebar" class="fixed top-0 left-0 bottom-0 w-80 bg-creme-100 border-r border-creme-300/60 z-50 transform -translate-x-full transition-transform duration-300 flex flex-col justify-between p-5 shadow-2xl">
+    <div>
+      <div class="flex items-center justify-between pb-4 border-b border-creme-300/60">
+        <h2 class="font-serif text-lg font-bold text-creme-900 tracking-wide">Histórico de Clientes</h2>
+        <button onclick="toggleSidebar()" class="text-creme-800 hover:text-creme-900 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-2 overflow-y-auto max-h-[calc(100vh-160px)]" id="historicoLista">
+        <!-- Itens salvos -->
+        <div onclick="carregarOrcamentoExemplo('Residência Eng. Carlos', 'Elétrica e Pintura')" class="p-3 bg-white/70 hover:bg-white rounded-xl border border-creme-300/50 cursor-pointer transition shadow-sm">
+          <div class="flex justify-between items-start">
+            <span class="font-semibold text-sm text-creme-900">Eng. Carlos Alberto</span>
+            <span class="text-[10px] bg-gold-400/20 text-gold-600 font-bold px-1.5 py-0.5 rounded">R$ 14.800</span>
+          </div>
+          <p class="text-xs text-creme-800 mt-1 line-clamp-1">Pintura completa + fiação de LED no teto</p>
+          <span class="text-[10px] text-gray-400 mt-2 block">Há 2 horas</span>
         </div>
       </div>
-      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        API Conectada
-      </span>
+    </div>
+
+    <button onclick="novoOrcamento()" class="w-full py-2.5 bg-creme-900 hover:bg-black text-creme-50 font-medium rounded-xl text-sm transition flex items-center justify-center gap-2">
+      <i class="fa-solid fa-plus text-xs"></i>
+      <span>Novo Orçamento</span>
+    </button>
+  </aside>
+
+  <!-- Header Chic / Sofisticado -->
+  <header class="border-b border-creme-200 bg-white/80 backdrop-blur-md sticky top-0 z-30 px-4 py-3.5">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleSidebar()" class="p-2 hover:bg-creme-100 rounded-lg text-creme-800 transition">
+          <i class="fa-solid fa-bars-staggered text-lg"></i>
+        </button>
+        <div>
+          <h1 class="font-serif text-2xl font-bold tracking-tight text-creme-900">OrçaFácil <span class="text-gold-500 italic font-normal">AI</span></h1>
+          <p class="text-[11px] uppercase tracking-wider text-creme-800 font-medium">Arquitetura & Engenharia</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gold-400/10 text-gold-600 border border-gold-400/30">
+          <i class="fa-solid fa-crown text-[10px]"></i> Gemini Pro Engine
+        </span>
+      </div>
     </div>
   </header>
 
-  <!-- Main Container -->
-  <main class="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+  <!-- Área Principal -->
+  <main class="flex-1 max-w-5xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-    <!-- Form Section -->
-    <section class="md:col-span-5 bg-gray-950 border border-gray-800 rounded-xl p-5 shadow-xl flex flex-col justify-between">
-      <form id="orcamentoForm" onsubmit="gerarOrcamento(event)" class="space-y-4">
+    <!-- Lado Esquerdo: Formulário & Gravação -->
+    <section class="lg:col-span-5 space-y-5">
+      <div class="bg-white border border-creme-200 rounded-2xl p-5 shadow-sm space-y-4">
+        
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1">Profissão / Categoria</label>
-          <select id="profissao" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="Pintor">Pintor</option>
-            <option value="Eletricista">Eletricista</option>
-            <option value="Encanador">Encanador</option>
-            <option value="Pedreiro">Pedreiro</option>
-            <option value="Marceneiro">Marceneiro</option>
-            <option value="Gesso / Drywall">Gesso / Drywall</option>
-            <option value="Técnico de Celulares">Técnico de Celulares</option>
-            <option value="Outro">Outro Provedor de Serviço</option>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-creme-800 mb-1">Especialidade / Profissão</label>
+          <select id="profissao" class="w-full bg-creme-50 border border-creme-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-creme-900 focus:outline-none focus:ring-2 focus:ring-gold-400">
+            <option value="Engenheiro / Empreiteiro">Engenheiro / Empreiteiro</option>
+            <option value="Arquitetura / Designer">Arquitetura / Designer de Interiores</option>
+            <option value="Pintor">Pintor Profissional</option>
+            <option value="Eletricista">Eletricista / Automação</option>
+            <option value="Mestre de Obras / Pedreiro">Mestre de Obras / Pedreiro</option>
+            <option value="Gesso & Drywall">Gesso & Drywall</option>
           </select>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1">Descrição do Serviço</label>
-          <textarea id="mensagem" rows="6" required placeholder="Ex: Preciso de um orçamento para pintar um quarto de 12m². Inclui paredes e teto, sem portas..."
-            class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"></textarea>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-creme-800 mb-1">Nome do Cliente / Obra</label>
+          <input type="text" id="nomeCliente" placeholder="Ex: Dra. Juliana (Apto 402)" class="w-full bg-creme-50 border border-creme-200 rounded-xl px-3.5 py-2 text-sm text-creme-900 focus:outline-none focus:ring-2 focus:ring-gold-400 placeholder-creme-300">
         </div>
 
-        <button type="submit" id="btnEnviar"
-          class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20">
-          <i class="fa-solid fa-paper-plane"></i>
-          <span>Gerar Orçamento</span>
-        </button>
-      </form>
+        <!-- Área do Áudio / Whisper + Caixa de Texto -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-semibold uppercase tracking-wider text-creme-800">Descrição ou Áudio</label>
+            <span id="audioTimer" class="hidden text-xs text-rose-600 font-mono font-bold animate-pulse">● 00:00</span>
+          </div>
 
-      <div class="mt-6 pt-4 border-t border-gray-800/60 text-xs text-gray-500 flex items-center justify-between">
-        <span>Modelo: <b>Gemini Flash</b></span>
-        <span>Engine: <b>Vercel Serverless</b></span>
+          <div class="relative">
+            <textarea id="mensagem" rows="6" placeholder="Fale ou digite os detalhes do serviço, medidas, materiais ou marcas desejadas (ex: Tintas Suvinil, Fiação Sil)..."
+              class="w-full bg-creme-50 border border-creme-200 rounded-xl p-3.5 pb-12 text-sm text-creme-900 focus:outline-none focus:ring-2 focus:ring-gold-400 placeholder-creme-800/40 resize-none leading-relaxed"></textarea>
+
+            <!-- Botão do Microfone Flutuante -->
+            <button id="btnGravador" type="button" onclick="alternarGravacao()"
+              class="absolute bottom-3 right-3 bg-creme-900 hover:bg-gold-500 text-white rounded-xl p-3 shadow-md transition flex items-center justify-center gap-2">
+              <i id="micIcon" class="fa-solid fa-microphone text-sm"></i>
+              <span id="micText" class="text-xs font-medium pr-1">Gravar Áudio</span>
+            </button>
+          </div>
+        </div>
+
+        <button onclick="enviarMensagem()" id="btnEnviar"
+          class="w-full bg-creme-900 hover:bg-black text-creme-50 font-medium py-3 px-4 rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-creme-900/10">
+          <i class="fa-solid fa-wand-magic-sparkles text-gold-400"></i>
+          <span>Gerar / Atualizar Orçamento</span>
+        </button>
+
       </div>
     </section>
 
-    <!-- Output Section -->
-    <section class="md:col-span-7 bg-gray-950 border border-gray-800 rounded-xl p-5 shadow-xl flex flex-col justify-between">
+    <!-- Lado Direito: Exibição Elegante do Orçamento -->
+    <section class="lg:col-span-7 bg-white border border-creme-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between min-h-[480px]">
       <div>
-        <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
-          <h2 class="font-semibold text-white text-base flex items-center gap-2">
-            <i class="fa-solid fa-file-invoice-dollar text-blue-400"></i>
-            Resultado em Tempo Real
-          </h2>
-          <span id="badgeStatus" class="hidden px-2.5 py-0.5 rounded text-xs font-semibold"></span>
+        <div class="flex items-center justify-between pb-4 border-b border-creme-200 mb-5">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-file-signature text-gold-500 text-lg"></i>
+            <h2 class="font-serif font-bold text-lg text-creme-900">Resumo do Orçamento</h2>
+          </div>
+          <span id="badgeStatus" class="px-3 py-1 rounded-full text-xs font-semibold bg-creme-100 text-creme-800">Aguardando dados</span>
         </div>
 
-        <!-- Initial Placeholder -->
-        <div id="placeholderState" class="py-16 text-center text-gray-500 space-y-3">
-          <i class="fa-solid fa-calculator text-4xl text-gray-700"></i>
-          <p class="text-sm">Preencha os dados ao lado e clique em **Gerar Orçamento** para testar a resposta da API.</p>
+        <!-- Estado Inicial -->
+        <div id="stateInitial" class="py-16 text-center text-creme-800/60 space-y-3">
+          <i class="fa-solid fa-[#FDFCF7] fa-compass-drafting text-4xl text-creme-300"></i>
+          <p class="text-sm max-w-xs mx-auto">Grave um áudio ou digite as informações do serviço ao lado para compor a proposta comercial.</p>
         </div>
 
         <!-- Loading State -->
-        <div id="loadingState" class="hidden py-16 text-center text-gray-400 space-y-4">
-          <div class="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <p class="text-sm">Processando dados com o Google Gemini...</p>
+        <div id="stateLoading" class="hidden py-16 text-center space-y-4">
+          <div class="inline-block w-8 h-8 border-3 border-gold-500 border-t-transparent rounded-full animate-spin"></div>
+          <p class="text-sm text-creme-800 font-medium">Analisando especificações e estruturando o orçamento...</p>
         </div>
 
-        <!-- Response Display -->
-        <div id="responseContainer" class="hidden space-y-4">
-          <!-- Text Feedback / Questions -->
-          <div id="questionsBox" class="hidden bg-amber-500/10 border border-amber-500/20 text-amber-300 p-4 rounded-lg text-sm space-y-2">
-            <p class="font-semibold flex items-center gap-1.5 text-amber-400">
-              <i class="fa-solid fa-circle-question"></i> Informações Adicionais Necessárias:
+        <!-- Resultado Renderizado -->
+        <div id="stateResult" class="hidden space-y-4">
+          <div id="feedbackBox" class="hidden bg-amber-500/10 border border-amber-500/30 text-amber-900 p-4 rounded-xl text-sm space-y-2">
+            <p class="font-semibold text-amber-800 flex items-center gap-2">
+              <i class="fa-solid fa-circle-info text-amber-600"></i> Perguntas / Detalhes Pendentes:
             </p>
-            <div id="questionsContent" class="whitespace-pre-wrap leading-relaxed"></div>
+            <div id="feedbackText" class="whitespace-pre-line leading-relaxed text-xs"></div>
           </div>
 
-          <!-- JSON Viewer -->
-          <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
-            <p class="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Resposta JSON do Backend:</p>
-            <pre id="jsonViewer" class="text-xs text-emerald-400 overflow-x-auto font-mono p-2 bg-gray-950 rounded border border-gray-800 max-h-[350px]"></pre>
+          <div class="bg-creme-50 border border-creme-200 rounded-xl p-4">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-creme-800 mb-2">Estrutura Gerada (JSON)</h3>
+            <pre id="jsonContent" class="text-xs font-mono text-creme-900 overflow-x-auto p-3 bg-white rounded-lg border border-creme-200/80 max-h-[320px]"></pre>
           </div>
         </div>
       </div>
 
-      <div class="mt-4 pt-3 border-t border-gray-800 flex justify-end">
-        <button onclick="limpar()" class="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1">
-          <i class="fa-solid fa-rotate-left"></i> Limpar painel
+      <div class="pt-4 border-t border-creme-200 flex justify-between items-center text-xs text-creme-800/70">
+        <span>Pronto para exportação em PDF / WhatsApp</span>
+        <button onclick="limparPainel()" class="hover:text-creme-900 flex items-center gap-1">
+          <i class="fa-solid fa-trash-can"></i> Limpar
         </button>
       </div>
     </section>
 
   </main>
 
+  <!-- Script de Gravação e Comunicação com a API -->
   <script>
-    async function gerarOrcamento(event) {
-      event.preventDefault();
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+    let timerInterval;
+    let historicoContexto = [];
 
-      const mensagem = document.getElementById('mensagem').value;
-      const profissao = document.getElementById('profissao').value;
-      const btnEnviar = document.getElementById('btnEnviar');
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      sidebar.classList.toggle('-translate-x-full');
+      backdrop.classList.toggle('hidden');
+    }
 
-      const placeholderState = document.getElementById('placeholderState');
-      const loadingState = document.getElementById('loadingState');
-      const responseContainer = document.getElementById('responseContainer');
-      const badgeStatus = document.getElementById('badgeStatus');
-      const jsonViewer = document.getElementById('jsonViewer');
-      const questionsBox = document.getElementById('questionsBox');
-      const questionsContent = document.getElementById('questionsContent');
+    // Gravação de Áudio NAtiva via Navegador
+    async function alternarGravacao() {
+      const btn = document.getElementById('btnGravador');
+      const micIcon = document.getElementById('micIcon');
+      const micText = document.getElementById('micText');
+      const timer = document.getElementById('audioTimer');
 
-      // UI Loading state
-      placeholderState.classList.add('hidden');
-      responseContainer.classList.add('hidden');
-      loadingState.classList.remove('hidden');
-      btnEnviar.disabled = true;
+      if (!isRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
 
-      try {
-        const response = await fetch('/api/orcamento', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mensagem, profissao, historico: [] })
-        });
+          mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+          mediaRecorder.onstop = processarAudioGravado;
 
-        const data = await response.json();
+          mediaRecorder.start();
+          isRecording = true;
 
-        loadingState.classList.add('hidden');
-        responseContainer.classList.remove('hidden');
+          btn.classList.replace('bg-creme-900', 'bg-rose-600');
+          micIcon.classList.replace('fa-microphone', 'fa-square');
+          micText.textContent = "Parar";
+          timer.classList.remove('hidden');
 
-        // Status badge
-        badgeStatus.classList.remove('hidden', 'bg-emerald-500/10', 'text-emerald-400', 'bg-amber-500/10', 'text-amber-400', 'bg-rose-500/10', 'text-rose-400');
-        if (data.status === 'incompleto') {
-          badgeStatus.textContent = 'INCOMPLETO';
-          badgeStatus.classList.add('bg-amber-500/10', 'text-amber-400', 'border', 'border-amber-500/20');
-        } else if (data.status === 'pronto') {
-          badgeStatus.textContent = 'CONCLUÍDO';
-          badgeStatus.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border', 'border-emerald-500/20');
-        } else {
-          badgeStatus.textContent = 'RESPOSTA';
-          badgeStatus.classList.add('bg-blue-500/10', 'text-blue-400', 'border', 'border-blue-500/20');
+          let segundos = 0;
+          timerInterval = setInterval(() => {
+            segundos++;
+            const mins = String(Math.floor(segundos / 60)).padStart(2, '0');
+            const secs = String(segundos % 60).padStart(2, '0');
+            timer.textContent = `● ${mins}:${secs}`;
+          }, 1000);
+
+        } catch (err) {
+          alert('Permissão de microfone negada ou indisponível no navegador.');
         }
+      } else {
+        mediaRecorder.stop();
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        isRecording = false;
 
-        // Render preguntas ou feedback
-        if (data.perguntas_feedback) {
-          questionsBox.classList.remove('hidden');
-          questionsContent.textContent = data.perguntas_feedback;
-        } else {
-          questionsBox.classList.add('hidden');
-        }
-
-        jsonViewer.textContent = JSON.stringify(data, null, 2);
-
-      } catch (err) {
-        loadingState.classList.add('hidden');
-        responseContainer.classList.remove('hidden');
-        badgeStatus.classList.remove('hidden');
-        badgeStatus.textContent = 'ERRO';
-        badgeStatus.classList.add('bg-rose-500/10', 'text-rose-400');
-        jsonViewer.textContent = JSON.stringify({ erro: "Erro ao comunicar com o servidor", detalhe: err.message }, null, 2);
-      } finally {
-        btnEnviar.disabled = false;
+        clearInterval(timerInterval);
+        btn.classList.replace('bg-rose-600', 'bg-creme-900');
+        micIcon.classList.replace('fa-square', 'fa-microphone');
+        micText.textContent = "Gravar Áudio";
+        timer.classList.add('hidden');
+        timer.textContent = '● 00:00';
       }
     }
 
-    function limpar() {
-      document.getElementById('orcamentoForm').reset();
-      document.getElementById('placeholderState').classList.remove('hidden');
-      document.getElementById('loadingState').classList.add('hidden');
-      document.getElementById('responseContainer').classList.add('hidden');
-      document.getElementById('badgeStatus').classList.add('hidden');
+    // Processa o áudio e insere a transcrição do Gemini
+    async function processarAudioGravado() {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+      const textarea = document.getElementById('mensagem');
+      
+      textarea.value += (textarea.value ? '\n\n' : '') + '[ Processando transcrição do áudio enviado... ]';
+
+      try {
+        const formData = new FormData();
+        formData.append('file', audioBlob);
+
+        const res = await fetch('/api/transcrever', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (data.texto) {
+          textarea.value = textarea.value.replace('[ Processando transcrição do áudio enviado... ]', `"[Áudio Transcrito]: ${data.texto}"`);
+        } else {
+          textarea.value = textarea.value.replace('[ Processando transcrição do áudio enviado... ]', '[ Áudio gravado e pronto para o orçamento ]');
+        }
+      } catch (e) {
+        textarea.value = textarea.value.replace('[ Processando transcrição do áudio enviado... ]', '[ Erro ao transcrever áudio ]');
+      }
+    }
+
+    // Envia o Orçamento acumulando contexto
+    async function enviarMensagem() {
+      const mensagem = document.getElementById('mensagem').value;
+      const profissao = document.getElementById('profissao').value;
+      const nomeCliente = document.getElementById('nomeCliente').value;
+
+      if (!mensagem.trim()) return alert('Por favor, informe ou grave os detalhes do orçamento.');
+
+      document.getElementById('stateInitial').classList.add('hidden');
+      document.getElementById('stateResult').classList.add('hidden');
+      document.getElementById('stateLoading').classList.remove('hidden');
+
+      try {
+        historicoContexto.push({ role: 'user', content: mensagem });
+
+        const res = await fetch('/api/orcamento', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mensagem, profissao, nomeCliente, historico: historicoContexto })
+        });
+
+        const data = await res.json();
+
+        document.getElementById('stateLoading').classList.add('hidden');
+        document.getElementById('stateResult').classList.remove('hidden');
+
+        const badge = document.getElementById('badgeStatus');
+        const feedbackBox = document.getElementById('feedbackBox');
+        const feedbackText = document.getElementById('feedbackText');
+        const jsonContent = document.getElementById('jsonContent');
+
+        if (data.status === 'incompleto') {
+          badge.textContent = 'PENDENTE / INCOMPLETO';
+          badge.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300';
+          feedbackBox.classList.remove('hidden');
+          feedbackText.textContent = data.perguntas_feedback;
+        } else {
+          badge.textContent = 'ORÇAMENTO PRONTO';
+          badge.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300';
+          feedbackBox.classList.add('hidden');
+        }
+
+        jsonContent.textContent = JSON.stringify(data, null, 2);
+
+      } catch (err) {
+        document.getElementById('stateLoading').classList.add('hidden');
+        alert('Erro ao processar orçamento. Tente novamente.');
+      }
+    }
+
+    function limparPainel() {
+      document.getElementById('mensagem').value = '';
+      document.getElementById('stateInitial').classList.remove('hidden');
+      document.getElementById('stateResult').classList.add('hidden');
+      historicoContexto = [];
+    }
+
+    function novoOrcamento() {
+      limparPainel();
+      document.getElementById('nomeCliente').value = '';
+      toggleSidebar();
     }
   </script>
 </body>
