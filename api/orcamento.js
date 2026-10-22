@@ -1,7 +1,7 @@
 // /api/orcamento.js
 // POST JSON → Google Gemini REST (gemini-2.5-flash) autenticado com GEMINI_API_KEY.
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-3.8-flash';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const SCHEMA_ORCAMENTO = {
